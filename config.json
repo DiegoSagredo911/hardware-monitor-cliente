@@ -1,0 +1,9 @@
+﻿{
+  "Title": "HardwareMonitor - Diego Sagredo",
+  "URL": "localhost",
+  "Port": "1883",
+  "IconPath": "ico.ico",
+  "Delay": "5000"
+  //"ComputerName": "",
+  // "Group": "HardwareMonitor",
+}
