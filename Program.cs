@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.Drawing;
@@ -20,7 +20,8 @@ namespace HardwareMonitor
 
         static Config config = ConfigLoader.LoadConfig();
 
-        static NotifyIcon trayIcon;
+        private static CancellationTokenSource _cts = new CancellationTokenSource();
+        private static NotifyIcon trayIcon;
 
         [STAThread]
         static void Main(string[] args)
@@ -42,29 +43,42 @@ namespace HardwareMonitor
             }
             finally
             {
-                // Asegúrate de liberar recursos si es necesario
+                _cts?.Cancel();
+                _cts?.Dispose();
                 trayIcon?.Dispose();
             }
         }
 
         static void RunApp()
         {
-            
-            // Cargar configuración
+            // Cargar configuración e icono
             trayIcon = new NotifyIcon();
-            trayIcon.Icon = Icon.ExtractAssociatedIcon(config.IconPath); // Puedes poner un ícono personalizado
-            trayIcon.Text = config.Title;
+            if (File.Exists(config.IconPath))
+            {
+                trayIcon.Icon = Icon.ExtractAssociatedIcon(config.IconPath);
+            }
+            else
+            {
+                trayIcon.Icon = SystemIcons.Application;
+            }
+            trayIcon.Text = config.Title ?? "Hardware Monitor";
             trayIcon.Visible = true;
 
-
-            
+            // Menú contextual para permitir cerrar la app
+            var contextMenu = new ContextMenuStrip();
+            contextMenu.Items.Add("Salir", null, OnExit);
+            trayIcon.ContextMenuStrip = contextMenu;
 
             ClientConnection cliente = new ClientConnection(config.URL, config.Port, config.Delay);
             cliente.computer(config.ComputerName ?? Environment.MachineName, config.Group ?? "");
 
-            cliente.senddata().GetAwaiter().GetResult();
+            // Ejecutar el envío de datos en segundo plano para no congelar el bucle de mensajes de Windows
+            Task.Run(async () =>
+            {
+                await cliente.senddata(_cts.Token);
+            }, _cts.Token);
 
-            Application.Run(); // Para que el icono se mantenga
+            Application.Run(); // Mantiene el mensaje loop de Windows activo para el NotifyIcon
         }
 
         public static class ConfigLoader
@@ -81,14 +95,15 @@ namespace HardwareMonitor
                 return JsonConvert.DeserializeObject<Config>(json);
             }
         }
-        //evento exit
+
         static void OnExit(object sender, EventArgs e)
         {
-
-
+            _cts.Cancel();
+            if (trayIcon != null)
+            {
+                trayIcon.Visible = false;
+            }
+            Application.Exit();
         }
-
-
     }
-
 }
